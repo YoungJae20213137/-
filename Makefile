@@ -13,7 +13,7 @@ SRC = test.c
 # OS detection
 ifeq ($(OS),Windows_NT)  # Windows 환경
     CFLAGS += -Ietc/PDCursesMod-master
-    LDFLAGS = -Letc/PDCursesMod-master -lpdcurses -lgdi32 -luser32 -lcomdlg32 -lwinmm
+    LDFLAGS = -Letc/PDCursesMod-master/wingui -lpdcurses -lgdi32 -luser32 -lcomdlg32 -lwinmm
 else                     # macOS 또는 Linux 환경
     UNAME_S := $(shell uname -s)
     ifeq ($(UNAME_S),Darwin)  # macOS

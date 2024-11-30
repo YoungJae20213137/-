@@ -10,6 +10,20 @@ typedef struct Node {
     struct Node *next;
 } Node;
 
+typedef struct TextBuffer {
+    Node *head;             
+    Node *tail;             
+    int modified;    
+    char *filename;       
+} TextBuffer;
+
+typedef struct Cursor {
+    Node *current;          
+    int row;                
+    int col;                
+} Cursor;
+
+// 노드 초기화
 Node* createNode(char c) {
     Node *newNode = (Node*)malloc(sizeof(Node));
     newNode->character = c;
@@ -18,73 +32,76 @@ Node* createNode(char c) {
     return newNode;
 }
 
-void insertNode(Node **head, Node **tail, Node *current, char c) {
+// 노드 삽입
+void insertNode(TextBuffer *tb, Cursor *cursor, char c) {
     Node *newNode = createNode(c);
-    if (*head == NULL) {
-        // Empty list
-        *head = newNode;
-        *tail = newNode;
-    } else if (current == NULL) {
-        // Insert at the beginning
-        newNode->next = *head;
-        (*head)->prev = newNode;
-        *head = newNode;
+    tb->modified = 1;
+
+    if (tb->head == NULL) {
+        tb->head = newNode;
+        tb->tail = newNode;
+        cursor->current = newNode;
+    } else if (cursor->current == NULL) {
+        newNode->next = tb->head;
+        tb->head->prev = newNode;
+        tb->head = newNode;
+        cursor->current = newNode;
     } else {
-        // Insert after current
-        newNode->prev = current;
-        newNode->next = current->next;
-        if (current->next != NULL) {
-            current->next->prev = newNode;
+        newNode->prev = cursor->current;
+        newNode->next = cursor->current->next;
+        if (cursor->current->next != NULL) {
+            cursor->current->next->prev = newNode;
         } else {
-            // Current is tail
-            *tail = newNode;
+            tb->tail = newNode;
         }
-        current->next = newNode;
+        cursor->current->next = newNode;
+        cursor->current = newNode;
     }
 }
 
-void deleteNode(Node **head, Node **tail, Node **current) {
-    if (*current == NULL) {
+void deleteNode(TextBuffer *tb, Cursor *cursor) {
+    if (cursor->current == NULL) {
         return;
     }
-    Node *nodeToDelete = *current;
+    tb->modified = 1;
+    Node *nodeToDelete = cursor->current;
 
     if (nodeToDelete->prev != NULL) {
         nodeToDelete->prev->next = nodeToDelete->next;
+        cursor->current = nodeToDelete->prev;
     } else {
-        // Deleting head
-        *head = nodeToDelete->next;
+        tb->head = nodeToDelete->next;
+        cursor->current = tb->head;
     }
 
     if (nodeToDelete->next != NULL) {
         nodeToDelete->next->prev = nodeToDelete->prev;
-        *current = nodeToDelete->next;
     } else {
-        // Deleting tail
-        *tail = nodeToDelete->prev;
-        *current = nodeToDelete->prev;
+        tb->tail = nodeToDelete->prev;
     }
 
     free(nodeToDelete);
 }
 
-void modifyNode(Node *current, char c) {
-    if (current != NULL) {
-        current->character = c;
+void modifyNode(Cursor *cursor, char c) {
+    if (cursor->current != NULL) {
+        cursor->current->character = c;
     }
 }
 
-void displayList(WINDOW *win, Node *head, Node *current) {
+void displayList(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     wclear(win);
-    Node *temp = head;
+    Node *temp = tb->head;
     int x = 0, y = 0;
     while (temp != NULL) {
         mvwaddch(win, y, x, temp->character);
-        if (temp == current) {
-            mvwchgat(win, y, x, 1, A_REVERSE, 0, NULL);
+        if (temp == cursor->current) {
+            wmove(win, y, x);
+            cursor->row = y;
+            cursor->col = x;
         }
         x++;
-        if (x >= COLS) {
+        if (temp->character == '\n' || x >= COLS) {
             x = 0;
             y++;
         }
@@ -93,63 +110,133 @@ void displayList(WINDOW *win, Node *head, Node *current) {
     wrefresh(win);
 }
 
-int main() {
+// // 파일 읽기
+// void load_file(TextBuffer *buffer) {
+//     FILE *file = fopen(buffer->filename, "r");
+//     if (!file) return; // 파일이 없으면 새 파일로 간주
+
+//     int ch;
+//     Cursor temp_cursor = { NULL, 0, 0 };
+//     while ((ch = fgetc(file)) != EOF) {
+//         insert_character(buffer, &temp_cursor, ch);
+//     }
+
+//     fclose(file);
+// }
+
+// // 파일 저장
+// void save_file(TextBuffer *buffer) {
+//     FILE *file = fopen(buffer->filename, "w");
+//     if (!file) {
+//         mvprintw(0, 0, "Error saving file: %s", buffer->filename);
+//         refresh();
+//         return;
+//     }
+
+//     Node *current = buffer->head;
+//     while (current) {
+//         fputc(current->character, file);
+//         current = current->next;
+//     }
+
+//     fclose(file);
+//     buffer->modified = 0;
+// }
+
+int main(int argc, char *argv[]) {
     initscr();
     cbreak();
     noecho();
     keypad(stdscr, TRUE);
 
-    Node *head = NULL;
-    Node *tail = NULL;
-    Node *current = NULL;
+    TextBuffer tb = {NULL, NULL, 0, NULL};
+    Cursor cursor = {NULL, 0, 0};
+
+    if (argc > 1) {
+        // Load file if provided
+        FILE *file = fopen(argv[1], "r");
+        if (file) {
+            int ch;
+            while ((ch = fgetc(file)) != EOF) {
+                insertNode(&tb, &cursor, (char)ch);
+            }
+            fclose(file);
+            tb.modified = 0;
+            tb.filename = strdup(argv[1]);
+            cursor.current = tb.tail;
+        } else {
+            tb.filename = strdup(argv[1]);
+        }
+    }
 
     int ch;
     while ((ch = getch()) != KEY_F(1)) { // Press F1 to exit
         switch (ch) {
             case KEY_LEFT:
-                if (current != NULL && current->prev != NULL) {
-                    current = current->prev;
+                if (cursor.current != NULL && cursor.current->prev != NULL) {
+                    cursor.current = cursor.current->prev;
                 }
                 break;
             case KEY_RIGHT:
-                if (current != NULL && current->next != NULL) {
-                    current = current->next;
+                if (cursor.current != NULL && cursor.current->next != NULL) {
+                    cursor.current = cursor.current->next;
                 }
+                break;
+            case KEY_UP:
+                // Implement moving up if needed
+                break;
+            case KEY_DOWN:
+                // Implement moving down if needed
                 break;
             case KEY_BACKSPACE:
             case 127:
-                if (current != NULL) {
-                    deleteNode(&head, &tail, &current);
-                }
+                deleteNode(&tb, &cursor);
                 break;
             case KEY_DC:
-                if (current != NULL && current->next != NULL) {
-                    Node *temp = current->next;
-                    deleteNode(&head, &tail, &temp);
+                if (cursor.current != NULL && cursor.current->next != NULL) {
+                    cursor.current = cursor.current->next;
+                    deleteNode(&tb, &cursor);
                 }
                 break;
             default:
                 if (ch >= 32 && ch <= 126) { // Printable characters
-                    insertNode(&head, &tail, current, (char)ch);
-                    if (current == NULL) {
-                        current = head;
-                    } else {
-                        current = current->next;
-                    }
+                    insertNode(&tb, &cursor, (char)ch);
+                } else if (ch == '\n' || ch == '\r') {
+                    insertNode(&tb, &cursor, '\n');
                 }
                 break;
         }
-        displayList(stdscr, head, current);
+        displayList(stdscr, &tb, &cursor);
+        move(cursor.row, cursor.col);
+        refresh();
     }
 
     endwin();
 
+    // Save file if modified
+    if (tb.modified && tb.filename) {
+        FILE *file = fopen(tb.filename, "w");
+        if (file) {
+            Node *temp = tb.head;
+            while (temp != NULL) {
+                fputc(temp->character, file);
+                temp = temp->next;
+            }
+            fclose(file);
+        }
+    }
+
     // Free the linked list
     Node *temp;
-    while (head != NULL) {
-        temp = head;
-        head = head->next;
+    while (tb.head != NULL) {
+        temp = tb.head;
+        tb.head = tb.head->next;
         free(temp);
+    }
+
+    // Free filename if allocated
+    if (tb.filename) {
+        free(tb.filename);
     }
 
     return 0;
