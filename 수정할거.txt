@@ -1,0 +1,15 @@
+1. 운영체제 별로 makefile 수정 O
+2. 기존에 있는 파일 열기 구현
+3. 자료구조 다시 짜기(node, textbuffer, cursor)
+4. 상태 바(전체 반전색)
+5. 메시지 바 (위치 조정되면 전체 크기 다시 얻어와서 표기(ch / key_resize)
+6. display 함수 따로 빼주기
+내용은
+move
+clrtoeol();
+mvprintw();
+refresh();
+while로 반복
+
+6. #define CTRL(x) ((x) & 0x1f)
+7. (mac에서) 예약어 방지 : system("stty -ixon");

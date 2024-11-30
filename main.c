@@ -10,6 +10,8 @@ gcc -o my_program main.c -I/c/Program\ Files/gcctemp/project/etc/PDCurses-master
 3) gui 모드로 컴파일
 gcc -o my_program main.c -I/c/Program\ Files/gcctemp/project/etc/PDCursesMod-master -L/c/Program\ Files/gcctemp/project/etc/PDCursesMod-master/wingui -l:libpdcurses.a -lwinmm -lgdi32 -lcomdlg32
 
+4) MAC에서 컴파일
+gcc -o my_program main.c -lncurses
 ===================================================================================================================================================================================================================*/
 
 #include <stdio.h>
@@ -17,6 +19,7 @@ gcc -o my_program main.c -I/c/Program\ Files/gcctemp/project/etc/PDCursesMod-mas
 #include <string.h>
 #include <ctype.h>
 #include <curses.h>
+
 
 #define MAX_LINES 1024
 #define MAX_LINE_LENGTH 256
@@ -26,8 +29,6 @@ typedef struct Node {
     char character;
     struct Node *prev;
     struct Node *next;
-    int row;
-    int col;
 } Node;
 
 typedef struct TextBuffer {
@@ -215,6 +216,7 @@ int main(int argc, char *argv[]) {
         }
 
         update_status_bar(buffer);
+
     }
 
     for (int i = 0; i < buffer->num_lines; i++) {
