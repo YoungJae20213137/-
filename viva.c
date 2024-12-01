@@ -338,7 +338,8 @@ void freeResources(TextBuffer *tb) {
 /* 테스트 모드 변수 추가 */
 int test_mode = 0;
 
-/* 테스트 모드 확인 */
+int main(int argc, char *argv[]) {
+    // 테스트 모드 확인
     if (argc > 1 && strcmp(argv[1], "--test") == 0) {
         test_mode = 1;
     }
@@ -352,7 +353,7 @@ int test_mode = 0;
     Cursor cursor = {NULL, 0, 0};
 
     if (argc > 1 && strcmp(argv[1], "--test") != 0) {
-        /* 파일이 제공되었을 때 */
+        // 파일이 제공되었을 때
         loadFile(&tb, &cursor, argv[1]);
     }
 
@@ -363,12 +364,12 @@ int test_mode = 0;
 
     endwin();
 
-    /* 파일 저장 */
+    // 파일 저장
     if (tb.modified && tb.filename) {
         saveFile(&tb);
     }
 
-    /* 메모리 해제 */
+    // 메모리 해제
     freeResources(&tb);
 
     return 0;
