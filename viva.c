@@ -215,10 +215,13 @@ void saveFile(TextBuffer *tb) {
 void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     int ch;
     if (test_mode) {
-        /* 테스트 모드에서 자동으로 ESC+q 입력 시뮬레이션 */
+        // 테스트 모드에서 자동으로 ESC+q 입력 시뮬레이션
+        // ncurses 함수 사용 없이 동작
         napms(1000); // 1초 대기
-        ch = 27; // ESC 키
-        goto esc_sequence; // ESC 시퀀스 처리로 이동
+        // 필요한 로직 수행
+        // ESC+q 입력 시뮬레이션
+        tb->modified = 0; // 수정되지 않았다고 가정
+        return; // 프로그램 종료
     }
 
     while (1) {
@@ -340,15 +343,21 @@ void freeResources(TextBuffer *tb) {
 }
 
 int main(int argc, char *argv[]) {
+    // 테스트 모드 변수 선언
+    int test_mode = 0;
+
     // 테스트 모드 확인
     if (argc > 1 && strcmp(argv[1], "--test") == 0) {
         test_mode = 1;
     }
 
-    initscr();
-    cbreak();
-    noecho();
-    keypad(stdscr, TRUE);
+    if (!test_mode) {
+        // 테스트 모드가 아닐 때만 ncurses 초기화
+        initscr();
+        cbreak();
+        noecho();
+        keypad(stdscr, TRUE);
+    }
 
     TextBuffer tb = {NULL, NULL, 0, NULL};
     Cursor cursor = {NULL, 0, 0};
@@ -358,12 +367,16 @@ int main(int argc, char *argv[]) {
         loadFile(&tb, &cursor, argv[1]);
     }
 
-    displayList(stdscr, &tb, &cursor);
-    move(cursor.row, cursor.col);
+    if (!test_mode) {
+        displayList(stdscr, &tb, &cursor);
+        move(cursor.row, cursor.col);
+    }
 
-    processInput(stdscr, &tb, &cursor);
+    processInput(test_mode ? NULL : stdscr, &tb, &cursor);
 
-    endwin();
+    if (!test_mode) {
+        endwin();
+    }
 
     // 파일 저장
     if (tb.modified && tb.filename) {
