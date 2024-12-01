@@ -1,40 +1,39 @@
-#include <curses.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-
-/* 테스트 모드 변수 추가 */
-int test_mode = 0;
-
 /* 단축키 정의 */
 #ifdef _WIN32
-#define SAVE_KEY    "Ctrl-S"
-#define QUIT_KEY    "Ctrl-Q"
-#define FIND_KEY    "Ctrl-F"
+#define SAVE_KEY    "Ctrl+S"
+#define QUIT_KEY    "Ctrl+Q"
+#define FIND_KEY    "Ctrl+F"
 #elif defined(__APPLE__)
-#define SAVE_KEY    "ESC+s"
-#define QUIT_KEY    "ESC+q"
-#define FIND_KEY    "ESC+f"
+#define SAVE_KEY    "ESC+S"
+#define QUIT_KEY    "ESC+Q"
+#define FIND_KEY    "ESC+F"
 #else
-#define SAVE_KEY    "Ctrl-S"
-#define QUIT_KEY    "Ctrl-Q"
-#define FIND_KEY    "Ctrl-F"
+#define SAVE_KEY    "Ctrl+S"
+#define QUIT_KEY    "Ctrl+Q"
+#define FIND_KEY    "Ctrl+F"
 #endif
 
-typedef struct Node {
+#include <curses.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+/* 구조체 정의 */
+typedef struct Node {       // 노드 구조체
     char character;
     struct Node *prev;
     struct Node *next;
 } Node;
 
-typedef struct {
+typedef struct TextBuffer { // 텍스트 버퍼 구조체
     Node *head;
     Node *tail;
     int modified;
     char *filename;
 } TextBuffer;
 
-typedef struct {
+typedef struct Cursor {     // 커서 구조체
     Node *current;
     int row;
     int col;
@@ -55,24 +54,24 @@ void insertNode(TextBuffer *tb, Cursor *cursor, char c) {
     tb->modified = 1; // 수정됨 표시
 
     if (tb->head == NULL) {
-        // 빈 리스트
+        // 빈 리스트일 경우
         tb->head = newNode;
         tb->tail = newNode;
         cursor->current = newNode;
     } else if (cursor->current == NULL) {
-        // 시작 부분에 삽입
+        // 텍스트 시작 부분에 삽입
         newNode->next = tb->head;
         tb->head->prev = newNode;
         tb->head = newNode;
         cursor->current = newNode;
     } else {
-        // 현재 위치 뒤에 삽입
+        // 현재 커서 위치 뒤에 삽입
         newNode->prev = cursor->current;
         newNode->next = cursor->current->next;
         if (cursor->current->next != NULL) {
             cursor->current->next->prev = newNode;
-        } else {
-            // 마지막 노드인 경우
+        } 
+        else {  // 마지막 노드인 경우
             tb->tail = newNode;
         }
         cursor->current->next = newNode;
@@ -86,27 +85,26 @@ void deleteNode(TextBuffer *tb, Cursor *cursor) {
         return;
     }
     tb->modified = 1; // 수정됨 표시
-    Node *nodeToDelete = cursor->current;
+    Node *dNode = cursor->current;
 
-    if (nodeToDelete->prev != NULL) {
-        nodeToDelete->prev->next = nodeToDelete->next;
-        cursor->current = nodeToDelete->prev;
+    if (dNode->prev != NULL) {
+        dNode->prev->next = dNode->next;
+        cursor->current = dNode->prev;
     } else {
         // 헤드 노드 삭제
-        tb->head = nodeToDelete->next;
+        tb->head = dNode->next;
         cursor->current = tb->head;
     }
 
-    if (nodeToDelete->next != NULL) {
-        nodeToDelete->next->prev = nodeToDelete->prev;
+    if (dNode->next != NULL) {
+        dNode->next->prev = dNode->prev;
     } else {
         // 테일 노드 삭제
-        tb->tail = nodeToDelete->prev;
+        tb->tail = dNode->prev;
     }
 
-    free(nodeToDelete);
+    free(dNode);
 }
-
 
 /* 라인 수 계산 함수 */
 int countLines(TextBuffer *tb) {
@@ -123,25 +121,25 @@ int countLines(TextBuffer *tb) {
 
 /* 상태 바 표시 함수 */
 void displayStatusBar(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
-    int status_row = LINES - 2;
+    int status_bar = LINES - 2;
     char status[COLS];
     int total_lines = countLines(tb);
-    snprintf(status, COLS, " [%s] - %d lines | Cursor: (%d:%d) ",
-             tb->filename ? tb->filename : "No Name", total_lines, cursor->row + 1, cursor->col + 1);
-
+    snprintf(status, COLS, " [%s] - %d lines | Cursor: (%d:%d) ", 
+        tb->filename ? tb->filename : "No Name", total_lines, cursor->row + 1, cursor->col + 1);
+    // 반전 효과
     wattron(win, A_REVERSE);
-    mvwprintw(win, status_row, 0, "%-*s", COLS - 1, status);
+    mvwprintw(win, status_bar, 0, "%-*s", COLS - 1, status);
     wattroff(win, A_REVERSE);
     wrefresh(win);
 }
 
 /* 메시지 바 표시 함수 */
 void displayMessageBar(WINDOW *win) {
-    int msg_row = LINES - 1;
+    int message_bar = LINES - 1;
     char message[COLS];
     snprintf(message, COLS, "HELP: %s = save | %s = quit | %s = find",
-             SAVE_KEY, QUIT_KEY, FIND_KEY);
-    mvwprintw(win, msg_row, 0, "%-*s", COLS - 1, message);
+        SAVE_KEY, QUIT_KEY, FIND_KEY);
+    mvwprintw(win, message_bar, 0, "%-*s", COLS - 1, message);
     wrefresh(win);
 }
 
@@ -150,6 +148,7 @@ void displayList(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     wclear(win);
     Node *temp = tb->head;
     int x = 0, y = 0;
+
     while (temp != NULL) {
         if (temp->character == '\n') {
             x = 0;
@@ -211,30 +210,150 @@ void saveFile(TextBuffer *tb) {
     }
 }
 
-/* 입력 처리 함수 */
+/* 왼쪽 커서 이동 */
+void moveCursorLeft(Cursor *cursor) {
+    if (cursor->current != NULL && cursor->current->prev != NULL) {
+        cursor->current = cursor->current->prev;
+        if (cursor->current->character == '\n') {
+            // 이전 줄의 끝으로 이동
+            cursor->current = cursor->current->prev; // '\n' 이전 문자로 이동
+            cursor->row--;
+            cursor->col = 0;
+            Node *temp = cursor->current;
+            while (temp != NULL && temp->character != '\n') {
+                temp = temp->prev;
+                cursor->col++;
+            }
+        } else {
+            cursor->col--;
+        }
+    }
+}
+
+/* 오른쪽 커서 이동 */
+void moveCursorRight(Cursor *cursor) {
+    if (cursor->current != NULL && cursor->current->next != NULL) {
+        cursor->current = cursor->current->next;
+        if (cursor->current->character == '\n') {
+            cursor->row++;
+            cursor->col = 0;
+        } else {
+            cursor->col++;
+        }
+    }
+}
+
+/* 위쪽 커서 이동 */
+void moveCursorUp(Cursor *cursor) {
+    if (cursor->row > 0) {
+        int selected_col = cursor->col;
+        // 현재 줄의 시작으로 이동
+        while (cursor->current->prev != NULL && cursor->current->character != '\n') {
+            cursor->current = cursor->current->prev;
+        }
+        if (cursor->current->prev != NULL) {
+            cursor->current = cursor->current->prev; // 이전 줄의 끝의 '\n'로 이동
+            cursor->row--;
+            cursor->col = 0;
+            // 이전 줄의 시작으로 이동
+            while (cursor->current->prev != NULL && cursor->current->character != '\n') {
+                cursor->current = cursor->current->prev;
+            }
+            if (cursor->current->character == '\n' && cursor->current->next != NULL) {
+                cursor->current = cursor->current->next;
+            }
+            // 원하는 열로 이동
+            while (cursor->col < selected_col && cursor->current->next != NULL && cursor->current->character != '\n') {
+                cursor->current = cursor->current->next;
+                cursor->col++;
+            }
+        }
+    }
+}
+
+/* 아래쪽 커서 이동 */
+void moveCursorDown(Cursor *cursor) {
+    Node *temp = cursor->current;
+    int selected_col = cursor->col;
+    // 현재 줄의 끝으로 이동
+    while (temp != NULL && temp->character != '\n') {
+        temp = temp->next;
+    }
+    if (temp != NULL && temp->next != NULL) {
+        cursor->current = temp->next; // 다음 줄의 시작으로 이동
+        cursor->row++;
+        cursor->col = 0;
+        // 원하는 열로 이동
+        while (cursor->col < selected_col && cursor->current->next != NULL && cursor->current->character != '\n') {
+            cursor->current = cursor->current->next;
+            cursor->col++;
+        }
+    }
+}
+
+/* 사용자 키 입력 처리 */
 void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     int ch;
-    if (test_mode) {
-        // 테스트 모드에서 자동으로 ESC+q 입력 시뮬레이션
-        // ncurses 함수 사용 없이 동작
-        napms(1000); // 1초 대기
-        // 필요한 로직 수행
-        // ESC+q 입력 시뮬레이션
-        tb->modified = 0; // 수정되지 않았다고 가정
-        return; // 프로그램 종료
-    }
-
     while (1) {
         ch = getch();
-        if (ch == 27) {
-        esc_sequence:
-            nodelay(win, TRUE); // 논블로킹 모드로 전환
-            int next_ch;
-            if (test_mode) {
-                next_ch = 'q';
-            } else {
-                next_ch = getch();
+    #ifdef _WIN32
+        /* Windows에서 Ctrl 키 조합 처리 */
+        if (ch == 19) { // Ctrl-S (저장)
+            saveFile(tb);
+        } else if (ch == 17) { // Ctrl-Q (종료)
+            return;
+        } else if (ch == 6) { // Ctrl-F (검색)
+            // 구현 실패
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    moveCursorLeft(cursor);
+                    break;
+                case KEY_RIGHT:
+                    moveCursorRight(cursor);
+                    break;
+                case KEY_UP:
+                    moveCursorUp(cursor);
+                    break;
+                case KEY_DOWN:
+                    moveCursorDown(cursor);
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                case 8:
+                    /* 백스페이스 처리 */
+                    deleteNode(tb, cursor);
+                    if (cursor->col > 0)
+                        cursor->col--;
+                    else if (cursor->row > 0) {
+                        cursor->row--;
+                        // 이전 줄의 끝으로 이동
+                        cursor->col = 0;
+                        Node *temp = cursor->current;
+                        while (temp != NULL && temp->character != '\n') {
+                            temp = temp->prev;
+                            cursor->col++;
+                        }
+                    }
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
+                        cursor->col = 0;
+                        cursor->row++;
+                    }
+                    break;
             }
+        }
+    #elif defined(__APPLE__)
+        /* macOS에서 ESC 시퀀스 처리 */
+        if (ch == 27) { // ESC 키를 눌렀을 때
+            nodelay(win, TRUE); // 논블로킹 모드로 전환
+            int next_ch = getch();
             nodelay(win, FALSE); // 블로킹 모드로 복원
             if (next_ch == ERR) {
                 // ESC 키만 눌린 경우 계속 진행
@@ -244,92 +363,129 @@ void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
                 switch (next_ch) {
                     case 's':
                     case 'S':
-                        // ESC + s 눌렀을 때 저장
+                        // ESC + S 눌렀을 때 저장
                         saveFile(tb);
                         break;
                     case 'q':
                     case 'Q':
-                        // ESC + q 눌렀을 때 종료
+                        // ESC + Q 눌렀을 때 종료
                         return;
                     case 'f':
                     case 'F':
-                        // ESC + f 눌렀을 때 검색 기능 (구현 필요)
-                        // searchFunction(tb, cursor);
+                        // ESC + F 눌렀을 때 검색
+                        // 구현 실패
                         break;
                     default:
                         break;
                 }
                 continue;
             }
-        }
-        switch (ch) {
-            case KEY_LEFT:
-                if (cursor->current != NULL && cursor->current->prev != NULL) {
-                    cursor->current = cursor->current->prev;
-                    if (cursor->current->character == '\n') {
-                        // 이전 줄의 끝으로 이동
-                        Node *temp = cursor->current;
-                        int x = 0;
-                        while (temp->prev != NULL && temp->prev->character != '\n') {
-                            temp = temp->prev;
-                            x++;
-                        }
-                        cursor->col = x;
-                        cursor->row--;
-                    } else {
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    moveCursorLeft(cursor);
+                    break;
+                case KEY_RIGHT:
+                    moveCursorRight(cursor);
+                    break;
+                case KEY_UP:
+                    moveCursorUp(cursor);
+                    break;
+                case KEY_DOWN:
+                    moveCursorDown(cursor);
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                    /* 백스페이스 처리 */
+                    deleteNode(tb, cursor);
+                    if (cursor->col > 0)
                         cursor->col--;
+                    else if (cursor->row > 0) {
+                        cursor->row--;
+                        // 이전 줄의 끝으로 이동
+                        cursor->col = 0;
+                        Node *temp = cursor->current;
+                        while (temp != NULL && temp->character != '\n') {
+                            temp = temp->prev;
+                            cursor->col++;
+                        }
                     }
-                }
-                break;
-            case KEY_RIGHT:
-                if (cursor->current != NULL && cursor->current->next != NULL) {
-                    cursor->current = cursor->current->next;
-                    if (cursor->current->character == '\n') {
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
                         cursor->col = 0;
                         cursor->row++;
-                    } else {
-                        cursor->col++;
                     }
-                }
-                break;
-            case KEY_BACKSPACE:
-            case 127:
-            case 8: // Windows에서 Backspace 키 코드 추가
-                deleteNode(tb, cursor);
-                if (cursor->col > 0)
-                    cursor->col--;
-                else if (cursor->row > 0) {
-                    cursor->row--;
-                    // 이전 줄의 끝으로 이동
-                    Node *temp = cursor->current;
-                    int x = 0;
-                    while (temp != NULL && temp->character != '\n') {
-                        temp = temp->prev;
-                        x++;
-                    }
-                    cursor->col = x;
-                }
-                break;
-            default:
-                if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
-                    insertNode(tb, cursor, (char)ch);
-                    cursor->col++;
-                } else if (ch == '\n' || ch == '\r') {
-                    insertNode(tb, cursor, '\n');
-                    cursor->col = 0;
-                    cursor->row++;
-                }
-                break;
+                    break;
+            }
         }
+    #else
+        /* 기타 운영체제(Linux)에서 기본적으로 Ctrl 키 조합 사용 */
+        if (ch == 19) { // Ctrl-S (저장)
+            saveFile(tb);
+        } else if (ch == 17) { // Ctrl-Q (종료)
+            return;
+        } else if (ch == 6) { // Ctrl-F (검색)
+            // 구현 실패
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    moveCursorLeft(cursor);
+                    break;
+                case KEY_RIGHT:
+                    moveCursorRight(cursor);
+                    break;
+                case KEY_UP:
+                    moveCursorUp(cursor);
+                    break;
+                case KEY_DOWN:
+                    moveCursorDown(cursor);
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                    /* 백스페이스 처리 */
+                    deleteNode(tb, cursor);
+                    if (cursor->col > 0)
+                        cursor->col--;
+                    else if (cursor->row > 0) {
+                        cursor->row--;
+                        // 이전 줄의 끝으로 이동
+                        cursor->col = 0;
+                        Node *temp = cursor->current;
+                        while (temp != NULL && temp->character != '\n') {
+                            temp = temp->prev;
+                            cursor->col++;
+                        }
+                    }
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
+                        cursor->col = 0;
+                        cursor->row++;
+                    }
+                    break;
+            }
+        }
+    #endif
+        /* 화면 업데이트 */
         displayList(win, tb, cursor);
         move(cursor->row, cursor->col);
         refresh();
     }
 }
 
-
 /* 메모리 해제 함수 */
-void freeResources(TextBuffer *tb) {
+void freeResource(TextBuffer *tb) {
     Node *temp;
     while (tb->head != NULL) {
         temp = tb->head;
@@ -342,41 +498,28 @@ void freeResources(TextBuffer *tb) {
     }
 }
 
+/* main */
 int main(int argc, char *argv[]) {
-    // 테스트 모드 변수 선언
-    int test_mode = 0;
-
-    // 테스트 모드 확인
-    if (argc > 1 && strcmp(argv[1], "--test") == 0) {
-        test_mode = 1;
-    }
-
-    if (!test_mode) {
-        // 테스트 모드가 아닐 때만 ncurses 초기화
-        initscr();
-        cbreak();
-        noecho();
-        keypad(stdscr, TRUE);
-    }
+    // ncurses 기본 세팅
+    initscr();
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
 
     TextBuffer tb = {NULL, NULL, 0, NULL};
     Cursor cursor = {NULL, 0, 0};
 
-    if (argc > 1 && strcmp(argv[1], "--test") != 0) {
+    if (argc > 1) {
         // 파일이 제공되었을 때
         loadFile(&tb, &cursor, argv[1]);
     }
 
-    if (!test_mode) {
-        displayList(stdscr, &tb, &cursor);
-        move(cursor.row, cursor.col);
-    }
+    displayList(stdscr, &tb, &cursor);
+    move(cursor.row, cursor.col);
 
-    processInput(test_mode ? NULL : stdscr, &tb, &cursor);
+    processInput(stdscr, &tb, &cursor);
 
-    if (!test_mode) {
-        endwin();
-    }
+    endwin();
 
     // 파일 저장
     if (tb.modified && tb.filename) {
@@ -384,8 +527,7 @@ int main(int argc, char *argv[]) {
     }
 
     // 메모리 해제
-    freeResources(&tb);
-    
-    printf("Program exited successfully.\n");
+    freeResource(&tb);
+
     return 0;
 }

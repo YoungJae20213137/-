@@ -13,3 +13,7 @@ while로 반복
 
 6. #define CTRL(x) ((x) & 0x1f)
 7. (mac에서) 예약어 방지 : system("stty -ixon");
+
+8. readme 작성
+9. 코드 중복 방지(주석 및 변수 통제)
+10. 파일 묶기 및 제출
