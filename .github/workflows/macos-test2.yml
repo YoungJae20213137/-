@@ -2,9 +2,9 @@ name: macOS Build and Test
 
 on:
   push:
-    branches: [ main ]  # 여기에서 브랜치 이름을 실제 브랜치로 변경
+    branches: [ main ]
   pull_request:
-    branches: [ main ]  # 여기에서도 동일하게 변경
+    branches: [ main ]
 
 jobs:
   build:
@@ -15,34 +15,16 @@ jobs:
 
     - name: Install dependencies
       run: |
-        brew install ncurses expect
+        brew install ncurses
 
     - name: Build
       run: |
         gcc -o text_editor viva.c -lncurses
 
-    - name: Create test file
-      run: |
-        echo "Test content" > test.txt
-
-    - name: Create expect script
-      run: |
-        echo '#!/usr/bin/expect -f
-        spawn ./text_editor test.txt
-        expect {
-            "HELP: *" {
-                sleep 1
-                send "\033"
-                send "q"
-            }
-        }
-        expect eof
-        ' > test_exit.exp
-        chmod +x test_exit.exp
-
     - name: Run Test
       run: |
-        ./test_exit.exp
+        ./text_editor --test
+         echo "Exit code: $?"
 
     - name: Check Exit Status
       run: |

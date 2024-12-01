@@ -385,6 +385,7 @@ int main(int argc, char *argv[]) {
 
     // 메모리 해제
     freeResources(&tb);
-
+    
+    printf("Program exited successfully.\n");
     return 0;
 }
