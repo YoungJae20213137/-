@@ -1,8 +1,20 @@
-#include <stdio.h>
+#include <curses.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <curses.h>
+
+#ifdef __APPLE__
+#define SAVE_KEY    "Command-S"
+#define QUIT_KEY    "Command-Q"
+#define FIND_KEY    "Command-F"
+#elif defined(_WIN32) || defined(__linux__)
+#define SAVE_KEY    "Ctrl-S"
+#define QUIT_KEY    "Ctrl-Q"
+#define FIND_KEY    "Ctrl-F"
+#else
+#define SAVE_KEY    "Ctrl-S"
+#define QUIT_KEY    "Ctrl-Q"
+#define FIND_KEY    "Ctrl-F"
+#endif
 
 typedef struct Node {
     char character;
@@ -10,20 +22,20 @@ typedef struct Node {
     struct Node *next;
 } Node;
 
-typedef struct TextBuffer {
-    Node *head;             
-    Node *tail;             
-    int modified;    
-    char *filename;       
+typedef struct {
+    Node *head;
+    Node *tail;
+    int modified;
+    char *filename;
 } TextBuffer;
 
-typedef struct Cursor {
-    Node *current;          
-    int row;                
-    int col;                
+typedef struct {
+    Node *current;
+    int row;
+    int col;
 } Cursor;
 
-// 노드 초기화
+/* 노드 생성 함수 */
 Node* createNode(char c) {
     Node *newNode = (Node*)malloc(sizeof(Node));
     newNode->character = c;
@@ -32,26 +44,30 @@ Node* createNode(char c) {
     return newNode;
 }
 
-// 노드 삽입
+/* 노드 삽입 함수 */
 void insertNode(TextBuffer *tb, Cursor *cursor, char c) {
     Node *newNode = createNode(c);
-    tb->modified = 1;
+    tb->modified = 1; // 수정됨 표시
 
     if (tb->head == NULL) {
+        // 빈 리스트
         tb->head = newNode;
         tb->tail = newNode;
         cursor->current = newNode;
     } else if (cursor->current == NULL) {
+        // 시작 부분에 삽입
         newNode->next = tb->head;
         tb->head->prev = newNode;
         tb->head = newNode;
         cursor->current = newNode;
     } else {
+        // 현재 위치 뒤에 삽입
         newNode->prev = cursor->current;
         newNode->next = cursor->current->next;
         if (cursor->current->next != NULL) {
             cursor->current->next->prev = newNode;
         } else {
+            // 마지막 노드인 경우
             tb->tail = newNode;
         }
         cursor->current->next = newNode;
@@ -59,17 +75,19 @@ void insertNode(TextBuffer *tb, Cursor *cursor, char c) {
     }
 }
 
+/* 노드 삭제 함수 */
 void deleteNode(TextBuffer *tb, Cursor *cursor) {
     if (cursor->current == NULL) {
         return;
     }
-    tb->modified = 1;
+    tb->modified = 1; // 수정됨 표시
     Node *nodeToDelete = cursor->current;
 
     if (nodeToDelete->prev != NULL) {
         nodeToDelete->prev->next = nodeToDelete->next;
         cursor->current = nodeToDelete->prev;
     } else {
+        // 헤드 노드 삭제
         tb->head = nodeToDelete->next;
         cursor->current = tb->head;
     }
@@ -77,71 +95,203 @@ void deleteNode(TextBuffer *tb, Cursor *cursor) {
     if (nodeToDelete->next != NULL) {
         nodeToDelete->next->prev = nodeToDelete->prev;
     } else {
+        // 테일 노드 삭제
         tb->tail = nodeToDelete->prev;
     }
 
     free(nodeToDelete);
 }
 
-void modifyNode(Cursor *cursor, char c) {
-    if (cursor->current != NULL) {
-        cursor->current->character = c;
+/* 라인 수 계산 함수 */
+int countLines(TextBuffer *tb) {
+    int lines = 1;
+    Node *temp = tb->head;
+    while (temp != NULL) {
+        if (temp->character == '\n') {
+            lines++;
+        }
+        temp = temp->next;
     }
+    return lines;
 }
 
+/* 상태 바 표시 함수 */
+void displayStatusBar(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
+    int status_row = LINES - 2;
+    char status[COLS];
+    int total_lines = countLines(tb);
+    snprintf(status, COLS, " [%s] - %d lines | Cursor: (%d:%d) ",
+             tb->filename ? tb->filename : "No Name", total_lines, cursor->row + 1, cursor->col + 1);
+
+    wattron(win, A_REVERSE);
+    mvwprintw(win, status_row, 0, "%-*s", COLS - 1, status);
+    wattroff(win, A_REVERSE);
+    wrefresh(win);
+}
+
+/* 메시지 바 표시 함수 */
+void displayMessageBar(WINDOW *win) {
+    int msg_row = LINES - 1;
+    char message[COLS];
+    snprintf(message, COLS, "HELP: %s = save | %s = quit | %s = find",
+             SAVE_KEY, QUIT_KEY, FIND_KEY);
+    mvwprintw(win, msg_row, 0, "%-*s", COLS - 1, message);
+    wrefresh(win);
+}
+
+/* 텍스트 버퍼를 화면에 표시하는 함수 */
 void displayList(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     wclear(win);
     Node *temp = tb->head;
     int x = 0, y = 0;
     while (temp != NULL) {
-        mvwaddch(win, y, x, temp->character);
+        if (temp->character == '\n') {
+            x = 0;
+            y++;
+        } else {
+            mvwaddch(win, y, x, temp->character);
+            x++;
+            if (x >= COLS) {
+                x = 0;
+                y++;
+            }
+        }
         if (temp == cursor->current) {
             wmove(win, y, x);
             cursor->row = y;
             cursor->col = x;
         }
-        x++;
-        if (temp->character == '\n' || x >= COLS) {
-            x = 0;
-            y++;
-        }
         temp = temp->next;
+        if (y >= LINES - 4) {
+            // 화면의 표시 가능한 영역을 초과하면 더 이상 출력하지 않음
+            break;
+        }
     }
     wrefresh(win);
+    displayStatusBar(win, tb, cursor);
+    displayMessageBar(win);
 }
 
-// // 파일 읽기
-// void load_file(TextBuffer *buffer) {
-//     FILE *file = fopen(buffer->filename, "r");
-//     if (!file) return; // 파일이 없으면 새 파일로 간주
+/* 파일 로드 함수 */
+void loadFile(TextBuffer *tb, Cursor *cursor, const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (file) {
+        int ch;
+        while ((ch = fgetc(file)) != EOF) {
+            insertNode(tb, cursor, (char)ch);
+        }
+        fclose(file);
+        tb->modified = 0;
+        tb->filename = strdup(filename);
+        cursor->current = tb->tail;
+    } else {
+        tb->filename = strdup(filename);
+    }
+}
 
-//     int ch;
-//     Cursor temp_cursor = { NULL, 0, 0 };
-//     while ((ch = fgetc(file)) != EOF) {
-//         insert_character(buffer, &temp_cursor, ch);
-//     }
+/* 파일 저장 함수 */
+void saveFile(TextBuffer *tb) {
+    if (tb->filename) {
+        FILE *file = fopen(tb->filename, "w");
+        if (file) {
+            Node *temp = tb->head;
+            while (temp != NULL) {
+                fputc(temp->character, file);
+                temp = temp->next;
+            }
+            fclose(file);
+            tb->modified = 0; // 저장 후 수정되지 않음으로 표시
+        }
+    }
+}
 
-//     fclose(file);
-// }
+/* 입력 처리 함수 */
+void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
+    int ch;
+    while ((ch = getch()) != 27) { // ESC 키를 누르면 종료
+        switch (ch) {
+            case KEY_LEFT:
+                if (cursor->current != NULL && cursor->current->prev != NULL) {
+                    cursor->current = cursor->current->prev;
+                    if (cursor->current->character == '\n') {
+                        // 이전 줄의 끝으로 이동
+                        Node *temp = cursor->current;
+                        int x = 0;
+                        while (temp->prev != NULL && temp->prev->character != '\n') {
+                            temp = temp->prev;
+                            x++;
+                        }
+                        cursor->col = x;
+                        cursor->row--;
+                    } else {
+                        cursor->col--;
+                    }
+                }
+                break;
+            case KEY_RIGHT:
+                if (cursor->current != NULL && cursor->current->next != NULL) {
+                    cursor->current = cursor->current->next;
+                    if (cursor->current->character == '\n') {
+                        cursor->col = 0;
+                        cursor->row++;
+                    } else {
+                        cursor->col++;
+                    }
+                }
+                break;
+            case KEY_BACKSPACE:
+            case 127:
+            case 8:
+                deleteNode(tb, cursor);
+                if (cursor->col > 0)
+                    cursor->col--;
+                else if (cursor->row > 0) {
+                    cursor->row--;
+                    // 이전 줄의 끝으로 이동
+                    Node *temp = cursor->current;
+                    int x = 0;
+                    while (temp != NULL && temp->character != '\n') {
+                        temp = temp->prev;
+                        x++;
+                    }
+                    cursor->col = x;
+                }
+                break;
+            case 19: // Ctrl-S (저장)
+                saveFile(tb);
+                break;
+            case 17: // Ctrl-Q (종료)
+                return;
+            default:
+                if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                    insertNode(tb, cursor, (char)ch);
+                    cursor->col++;
+                } else if (ch == '\n' || ch == '\r') {
+                    insertNode(tb, cursor, '\n');
+                    cursor->col = 0;
+                    cursor->row++;
+                }
+                break;
+        }
+        displayList(win, tb, cursor);
+        move(cursor->row, cursor->col);
+        refresh();
+    }
+}
 
-// // 파일 저장
-// void save_file(TextBuffer *buffer) {
-//     FILE *file = fopen(buffer->filename, "w");
-//     if (!file) {
-//         mvprintw(0, 0, "Error saving file: %s", buffer->filename);
-//         refresh();
-//         return;
-//     }
+/* 메모리 해제 함수 */
+void freeResources(TextBuffer *tb) {
+    Node *temp;
+    while (tb->head != NULL) {
+        temp = tb->head;
+        tb->head = tb->head->next;
+        free(temp);
+    }
 
-//     Node *current = buffer->head;
-//     while (current) {
-//         fputc(current->character, file);
-//         current = current->next;
-//     }
-
-//     fclose(file);
-//     buffer->modified = 0;
-// }
+    if (tb->filename) {
+        free(tb->filename);
+    }
+}
 
 int main(int argc, char *argv[]) {
     initscr();
@@ -153,91 +303,24 @@ int main(int argc, char *argv[]) {
     Cursor cursor = {NULL, 0, 0};
 
     if (argc > 1) {
-        // Load file if provided
-        FILE *file = fopen(argv[1], "r");
-        if (file) {
-            int ch;
-            while ((ch = fgetc(file)) != EOF) {
-                insertNode(&tb, &cursor, (char)ch);
-            }
-            fclose(file);
-            tb.modified = 0;
-            tb.filename = strdup(argv[1]);
-            cursor.current = tb.tail;
-        } else {
-            tb.filename = strdup(argv[1]);
-        }
+        // 파일이 제공되었을 때
+        loadFile(&tb, &cursor, argv[1]);
     }
 
-    int ch;
-    while ((ch = getch()) != KEY_F(1)) { // Press F1 to exit
-        switch (ch) {
-            case KEY_LEFT:
-                if (cursor.current != NULL && cursor.current->prev != NULL) {
-                    cursor.current = cursor.current->prev;
-                }
-                break;
-            case KEY_RIGHT:
-                if (cursor.current != NULL && cursor.current->next != NULL) {
-                    cursor.current = cursor.current->next;
-                }
-                break;
-            case KEY_UP:
-                // Implement moving up if needed
-                break;
-            case KEY_DOWN:
-                // Implement moving down if needed
-                break;
-            case KEY_BACKSPACE:
-            case 127:
-                deleteNode(&tb, &cursor);
-                break;
-            case KEY_DC:
-                if (cursor.current != NULL && cursor.current->next != NULL) {
-                    cursor.current = cursor.current->next;
-                    deleteNode(&tb, &cursor);
-                }
-                break;
-            default:
-                if (ch >= 32 && ch <= 126) { // Printable characters
-                    insertNode(&tb, &cursor, (char)ch);
-                } else if (ch == '\n' || ch == '\r') {
-                    insertNode(&tb, &cursor, '\n');
-                }
-                break;
-        }
-        displayList(stdscr, &tb, &cursor);
-        move(cursor.row, cursor.col);
-        refresh();
-    }
+    displayList(stdscr, &tb, &cursor);
+    move(cursor.row, cursor.col);
+
+    processInput(stdscr, &tb, &cursor);
 
     endwin();
 
-    // Save file if modified
+    // 파일 저장
     if (tb.modified && tb.filename) {
-        FILE *file = fopen(tb.filename, "w");
-        if (file) {
-            Node *temp = tb.head;
-            while (temp != NULL) {
-                fputc(temp->character, file);
-                temp = temp->next;
-            }
-            fclose(file);
-        }
+        saveFile(&tb);
     }
 
-    // Free the linked list
-    Node *temp;
-    while (tb.head != NULL) {
-        temp = tb.head;
-        tb.head = tb.head->next;
-        free(temp);
-    }
-
-    // Free filename if allocated
-    if (tb.filename) {
-        free(tb.filename);
-    }
+    // 메모리 해제
+    freeResources(&tb);
 
     return 0;
 }
