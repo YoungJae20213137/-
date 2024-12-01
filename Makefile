@@ -8,7 +8,7 @@ CFLAGS = -Wall -g
 
 # Source and target
 TARGET = viva
-SRC = test.c
+SRC = viva.c
 
 # OS detection
 ifeq ($(OS),Windows_NT)  # Windows 환경
