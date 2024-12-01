@@ -1,6 +1,10 @@
 #include <curses.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+/* 테스트 모드 변수 추가 */
+int test_mode = 0;
 
 /* 단축키 정의 */
 #ifdef _WIN32
@@ -334,9 +338,6 @@ void freeResources(TextBuffer *tb) {
         free(tb->filename);
     }
 }
-
-/* 테스트 모드 변수 추가 */
-int test_mode = 0;
 
 int main(int argc, char *argv[]) {
     // 테스트 모드 확인
