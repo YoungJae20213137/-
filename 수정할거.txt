@@ -2,8 +2,8 @@
 2. 기존에 있는 파일 열기 구현
 3. 자료구조 다시 짜기(node, textbuffer, cursor) O
 4. 상태 바(전체 반전색)
-5. 메시지 바 (위치 조정되면 전체 크기 다시 얻어와서 표기(ch / key_resize)
-6. display 함수 따로 빼주기
+5. 메시지 바 (위치 조정되면 전체 크기 다시 얻어와서 표기(ch / key_resize) O
+6. display 함수 따로 빼주기 O
 내용은
 move
 clrtoeol();

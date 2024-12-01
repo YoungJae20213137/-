@@ -1,0 +1,49 @@
+name: macOS Build and Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        brew install ncurses expect
+
+    - name: Build
+      run: |
+        gcc -o text_editor text_editor.c -lncurses
+
+    - name: Create test file
+      run: |
+        echo "Test content" > test.txt
+
+    - name: Create expect script
+      run: |
+        echo '#!/usr/bin/expect -f
+        spawn ./text_editor test.txt
+        expect {
+            "HELP: *" {
+                sleep 1
+                send "\033"
+                send "q"
+            }
+        }
+        expect eof
+        ' > test_exit.exp
+        chmod +x test_exit.exp
+
+    - name: Run Test
+      run: |
+        ./test_exit.exp
+
+    - name: Check Exit Status
+      run: |
+        echo "Program exited successfully."

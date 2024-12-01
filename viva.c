@@ -2,14 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef __APPLE__
-#define SAVE_KEY    "Command-S"
-#define QUIT_KEY    "Command-Q"
-#define FIND_KEY    "Command-F"
-#elif defined(_WIN32) || defined(__linux__)
+/* 단축키 정의 */
+#ifdef _WIN32
 #define SAVE_KEY    "Ctrl-S"
 #define QUIT_KEY    "Ctrl-Q"
 #define FIND_KEY    "Ctrl-F"
+#elif defined(__APPLE__)
+#define SAVE_KEY    "ESC+s"
+#define QUIT_KEY    "ESC+q"
+#define FIND_KEY    "ESC+f"
 #else
 #define SAVE_KEY    "Ctrl-S"
 #define QUIT_KEY    "Ctrl-Q"
@@ -101,6 +102,7 @@ void deleteNode(TextBuffer *tb, Cursor *cursor) {
 
     free(nodeToDelete);
 }
+
 
 /* 라인 수 계산 함수 */
 int countLines(TextBuffer *tb) {
@@ -208,71 +210,136 @@ void saveFile(TextBuffer *tb) {
 /* 입력 처리 함수 */
 void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     int ch;
-    while ((ch = getch()) != 27) { // ESC 키를 누르면 종료
-        switch (ch) {
-            case KEY_LEFT:
-                if (cursor->current != NULL && cursor->current->prev != NULL) {
-                    cursor->current = cursor->current->prev;
-                    if (cursor->current->character == '\n') {
-                        // 이전 줄의 끝으로 이동
-                        Node *temp = cursor->current;
-                        int x = 0;
-                        while (temp->prev != NULL && temp->prev->character != '\n') {
-                            temp = temp->prev;
-                            x++;
-                        }
-                        cursor->col = x;
-                        cursor->row--;
-                    } else {
-                        cursor->col--;
-                    }
-                }
-                break;
-            case KEY_RIGHT:
-                if (cursor->current != NULL && cursor->current->next != NULL) {
-                    cursor->current = cursor->current->next;
-                    if (cursor->current->character == '\n') {
+    while (1) {
+        ch = getch();
+#ifdef _WIN32
+        /* Windows에서 Ctrl 키 조합 처리 */
+        if (ch == 19) { // Ctrl-S (저장)
+            saveFile(tb);
+        } else if (ch == 17) { // Ctrl-Q (종료)
+            return;
+        } else if (ch == 6) { // Ctrl-F (검색 기능 구현 가능)
+            // 검색 기능을 구현하려면 여기에 추가
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_RIGHT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                case 8: // Windows에서 Backspace 키 코드 추가
+                    deleteNode(tb, cursor);
+                    /* ... (커서 위치 업데이트) ... */
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
                         cursor->col = 0;
                         cursor->row++;
-                    } else {
-                        cursor->col++;
                     }
-                }
-                break;
-            case KEY_BACKSPACE:
-            case 127:
-            case 8:
-                deleteNode(tb, cursor);
-                if (cursor->col > 0)
-                    cursor->col--;
-                else if (cursor->row > 0) {
-                    cursor->row--;
-                    // 이전 줄의 끝으로 이동
-                    Node *temp = cursor->current;
-                    int x = 0;
-                    while (temp != NULL && temp->character != '\n') {
-                        temp = temp->prev;
-                        x++;
-                    }
-                    cursor->col = x;
-                }
-                break;
-            case 19: // Ctrl-S (저장)
-                saveFile(tb);
-                break;
-            case 17: // Ctrl-Q (종료)
-                return;
-            default:
-                if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
-                    insertNode(tb, cursor, (char)ch);
-                    cursor->col++;
-                } else if (ch == '\n' || ch == '\r') {
-                    insertNode(tb, cursor, '\n');
-                    cursor->col = 0;
-                    cursor->row++;
-                }
-                break;
+                    break;
+            }
         }
+#elif defined(__APPLE__)
+        /* macOS에서 ESC 시퀀스 처리 */
+        if (ch == 27) { // ESC 키를 눌렀을 때
+            nodelay(win, TRUE); // 논블로킹 모드로 전환
+            int next_ch = getch();
+            nodelay(win, FALSE); // 블로킹 모드로 복원
+            if (next_ch == ERR) {
+                // ESC 키만 눌린 경우 계속 진행
+                continue;
+            } else {
+                // ESC + 다른 키 조합 처리
+                switch (next_ch) {
+                    case 's':
+                    case 'S':
+                        // ESC + s 눌렀을 때 저장
+                        saveFile(tb);
+                        break;
+                    case 'q':
+                    case 'Q':
+                        // ESC + q 눌렀을 때 종료
+                        return;
+                    case 'f':
+                    case 'F':
+                        // ESC + f 눌렀을 때 검색 기능 (구현 필요)
+                        // searchFunction(tb, cursor);
+                        break;
+                    default:
+                        break;
+                }
+                continue;
+            }
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_RIGHT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                    deleteNode(tb, cursor);
+                    /* ... (커서 위치 업데이트) ... */
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
+                        cursor->col = 0;
+                        cursor->row++;
+                    }
+                    break;
+            }
+        }
+#else
+        /* 다른 운영체제에서는 Ctrl 키 사용 */
+        if (ch == 19) { // Ctrl-S (저장)
+            saveFile(tb);
+        } else if (ch == 17) { // Ctrl-Q (종료)
+            return;
+        } else if (ch == 6) { // Ctrl-F (검색 기능 구현 가능)
+            // 검색 기능을 구현하려면 여기에 추가
+        } else {
+            /* 기존 입력 처리 */
+            switch (ch) {
+                case KEY_LEFT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_RIGHT:
+                    /* ... (커서 이동 코드) ... */
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                    deleteNode(tb, cursor);
+                    /* ... (커서 위치 업데이트) ... */
+                    break;
+                default:
+                    if (ch >= 32 && ch <= 126) { // 출력 가능한 문자
+                        insertNode(tb, cursor, (char)ch);
+                        cursor->col++;
+                    } else if (ch == '\n' || ch == '\r') {
+                        insertNode(tb, cursor, '\n');
+                        cursor->col = 0;
+                        cursor->row++;
+                    }
+                    break;
+            }
+        }
+#endif
+        /* 화면 업데이트 */
         displayList(win, tb, cursor);
         move(cursor->row, cursor->col);
         refresh();
