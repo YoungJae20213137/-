@@ -39,6 +39,14 @@ typedef struct Cursor {     // 커서 구조체
     int col;
 } Cursor;
 
+typedef struct SearchContext {    // 탐색된 개체 구조체
+    char query[256];
+    Node **results;         // 찾은 노드들의 주소를 저장(포인터)
+    int result_count;
+    int current_index;
+    Cursor original_cursor;     // 원래 커서를 복사
+} SearchContext;
+
 /* 노드 생성 함수 */
 Node* createNode(char c) {
     Node *newNode = (Node*)malloc(sizeof(Node));
@@ -291,6 +299,204 @@ void moveCursorDown(Cursor *cursor) {
     }
 }
 
+/* 검색 기능 흐름 처리 */
+void searchFunction(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
+    SearchContext sc;
+    sc.result_count = 0;
+    sc.current_index = 0;
+    sc.results = NULL;
+    sc.original_cursor = *cursor; // 검색 이전의 커서 위치 저장
+
+    echo(); // 입력 에코 활성화
+    curs_set(1); // 커서 표시
+
+    // 사용자로부터 검색어 입력 받기
+    displayPrompt(win, "Search: ", sc.query, sizeof(sc.query));
+
+    noecho(); // 입력 에코 비활성화
+    curs_set(0); // 커서 숨김
+
+    if (strlen(sc.query) == 0) {
+        // 검색어가 비어있으면 검색 취소
+        return;
+    }
+
+    // 검색 결과 찾기
+    findMatches(tb, &sc);
+
+    if (sc.result_count == 0) {
+        // 검색 결과가 없을 경우 메시지 표시
+        mvwprintw(win, tb->lines + 1, 0, "No matches found.");
+        wrefresh(win);
+        getch(); // 사용자 입력 대기
+        return;
+    }
+
+    // 첫 번째 검색 결과 하이라이트
+    highlightMatch(win, tb, &sc);
+
+    int ch;
+    while (1) {
+        ch = getch();
+        if (ch == KEY_LEFT) {
+            // 이전 검색 결과로 이동
+            clearHighlight(win, tb, &sc);
+            sc.current_index = (sc.current_index - 1 + sc.result_count) % sc.result_count;
+            highlightMatch(win, tb, &sc);
+        } else if (ch == KEY_RIGHT) {
+            // 다음 검색 결과로 이동
+            clearHighlight(win, tb, &sc);
+            sc.current_index = (sc.current_index + 1) % sc.result_count;
+            highlightMatch(win, tb, &sc);
+        } else if (ch == '\n' || ch == '\r') {
+            // Enter 키 눌렀을 때 검색 종료 및 편집 시작
+            *cursor = getCursorFromNode(tb, sc.results[sc.current_index]);
+            break;
+        } else if (ch == 27) {
+            // ESC 키 눌렀을 때 검색 취소 및 커서 복원
+            clearHighlight(win, tb, &sc);
+            *cursor = sc.original_cursor;
+            break;
+        }
+    }
+
+    // 메모리 해제
+    free(sc.results);
+
+    // 화면 갱신
+    displayList(win, tb, cursor);
+    move(cursor->row, cursor->col);
+    refresh();
+}
+
+/* 검색 위치 저장 함수 */
+void findMatches(TextBuffer *tb, SearchContext *sc) {
+    Node *current = tb->head;
+    int query_len = strlen(sc->query);
+    sc->result_count = 0;
+
+    // 첫 번째 패스: 검색 결과 개수 세기
+    while (current != NULL) {
+        if (current->character == sc->query[0]) {
+            Node *temp = current;
+            int i = 0;
+            while (temp != NULL && sc->query[i] != '\0' && temp->character == sc->query[i]) {
+                temp = temp->next;
+                i++;
+            }
+            if (sc->query[i] == '\0') {
+                sc->result_count++;
+            }
+        }
+        current = current->next;
+    }
+
+    if (sc->result_count == 0) {
+        sc->results = NULL;
+        return;
+    }
+
+    // 메모리 할당
+    sc->results = (Node **)malloc(sizeof(Node *) * sc->result_count);
+
+    // 두 번째 패스: 검색 결과 저장
+    current = tb->head;
+    int index = 0;
+    while (current != NULL) {
+        if (current->character == sc->query[0]) {
+            Node *temp = current;
+            int i = 0;
+            while (temp != NULL && sc->query[i] != '\0' && temp->character == sc->query[i]) {
+                temp = temp->next;
+                i++;
+            }
+            if (sc->query[i] == '\0') {
+                sc->results[index++] = current;
+            }
+        }
+        current = current->next;
+    }
+}
+
+/* 검색 결과 하이라이트 함수 */
+void highlightMatch(WINDOW *win, TextBuffer *tb, SearchContext *sc) {
+    Node *current = sc->results[sc->current_index];
+    int query_len = strlen(sc->query);
+
+    // 현재 속성 저장
+    attr_t attrs;
+    short pair;
+    wattr_get(win, &attrs, &pair, NULL);
+
+    // 하이라이트 속성 적용
+    wattron(win, A_REVERSE);
+
+    int row = 0, col = 0;
+    Node *temp = tb->head;
+    while (temp != current && temp != NULL) {
+        if (temp->character == '\n') {
+            row++;
+            col = 0;
+        } else {
+            col++;
+        }
+        temp = temp->next;
+    }
+
+    for (int i = 0; i < query_len && temp != NULL; i++) {
+        mvwaddch(win, row, col, temp->character);
+        if (temp->character == '\n') {
+            row++;
+            col = 0;
+        } else {
+            col++;
+        }
+        temp = temp->next;
+    }
+
+    // 이전 속성 복원
+    wattroff(win, A_REVERSE);
+    wattr_set(win, attrs, pair, NULL);
+
+    wrefresh(win);
+}
+
+/* 언하이라이트 함수 */
+void clearHighlight(WINDOW *win, TextBuffer *tb, SearchContext *sc) {
+    // 전체 텍스트 버퍼를 다시 표시하여 하이라이트 제거
+    displayList(win, tb, NULL);
+}
+
+/* 프롬프트 표시 함수 */
+void displayPrompt(WINDOW *win, const char *prompt, char *buffer, int buffer_size) {
+    int y, x;
+    getmaxyx(win, y, x);
+    mvwprintw(win, y - 1, 0, "%s", prompt);
+    wclrtoeol(win); // 줄의 나머지 부분 지우기
+    wrefresh(win);
+    wgetnstr(win, buffer, buffer_size - 1);
+}
+
+/* 노드 위치 계산 함수 */ 
+Cursor getCursorFromNode(TextBuffer *tb, Node *node) {
+    Cursor cursor;
+    cursor.current = node;
+    cursor.row = 0;
+    cursor.col = 0;
+
+    Node *temp = tb->head;
+    while (temp != node && temp != NULL) {
+        if (temp->character == '\n') {
+            cursor.row++;
+            cursor.col = 0;
+        } else {
+            cursor.col++;
+        }
+        temp = temp->next;
+    }
+    return cursor;
+}
+
 /* 사용자 키 입력 처리 */
 void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
     int ch;
@@ -303,7 +509,7 @@ void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
         } else if (ch == 17) { // Ctrl-Q (종료)
             return;
         } else if (ch == 6) { // Ctrl-F (검색)
-            // 구현 실패
+            searchFunction(win, tb, cursor);
         } else {
             /* 기존 입력 처리 */
             switch (ch) {
@@ -372,8 +578,7 @@ void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
                         return;
                     case 'f':
                     case 'F':
-                        // ESC + F 눌렀을 때 검색
-                        // 구현 실패
+                        searchFunction(win, tb, cursor);
                         break;
                     default:
                         break;
@@ -431,7 +636,7 @@ void processInput(WINDOW *win, TextBuffer *tb, Cursor *cursor) {
         } else if (ch == 17) { // Ctrl-Q (종료)
             return;
         } else if (ch == 6) { // Ctrl-F (검색)
-            // 구현 실패
+            searchFunction(win, tb, cursor);
         } else {
             /* 기존 입력 처리 */
             switch (ch) {

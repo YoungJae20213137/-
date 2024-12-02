@@ -1,7 +1,3 @@
-# Makefile for compiling a GTK+3 application
-
-# Variables
-
 # Compiler and flags
 CC = gcc
 CFLAGS = -Wall -g
